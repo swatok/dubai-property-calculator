@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/dubai-property-calculator/static/css/main.e6c13ad2.css",
-    "main.js": "/dubai-property-calculator/static/js/main.f6a1730b.js",
+    "main.js": "/dubai-property-calculator/static/js/main.9ac39dac.js",
     "static/js/453.627daf9a.chunk.js": "/dubai-property-calculator/static/js/453.627daf9a.chunk.js",
     "index.html": "/dubai-property-calculator/index.html",
     "main.e6c13ad2.css.map": "/dubai-property-calculator/static/css/main.e6c13ad2.css.map",
-    "main.f6a1730b.js.map": "/dubai-property-calculator/static/js/main.f6a1730b.js.map",
+    "main.9ac39dac.js.map": "/dubai-property-calculator/static/js/main.9ac39dac.js.map",
     "453.627daf9a.chunk.js.map": "/dubai-property-calculator/static/js/453.627daf9a.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.e6c13ad2.css",
-    "static/js/main.f6a1730b.js"
+    "static/js/main.9ac39dac.js"
   ]
 }
