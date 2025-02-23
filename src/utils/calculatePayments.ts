@@ -27,38 +27,26 @@ const calculateCompoundIncome = (
 export const calculatePaymentSchedule = (propertyDetails: PropertyDetails): PaymentSchedule[] => {
     const { price, completionDate, selectedPlan, assetIncome } = propertyDetails;
     const schedule: PaymentSchedule[] = [];
-    let currentAssetAmount = assetIncome?.initialAmount || 0;
-    let lastPaymentDate = new Date();
+    let currentAssetAmount = 0; // Починаємо з 0, бо актив ще не запущено
     let totalAdditionalFundsNeeded = 0;
 
-    // Розрахунок початкового внеску
-    const downPaymentAmount = Math.round((price * selectedPlan.downPaymentPercentage) / 100);
+    // Створюємо масив всіх дат платежів
+    const allPaymentDates: { date: Date; amount: number; description: string; paymentType: string }[] = [];
+    
+    // Додаємо початковий внесок
     const downPaymentDate = new Date();
-    
-    let additionalFundsNeeded = 0;
-    let assetAmountUsed = Math.min(currentAssetAmount, downPaymentAmount);
-    if (assetAmountUsed < downPaymentAmount) {
-        additionalFundsNeeded = downPaymentAmount - assetAmountUsed;
-        totalAdditionalFundsNeeded += additionalFundsNeeded;
-    }
-    
-    currentAssetAmount = Math.max(0, currentAssetAmount - assetAmountUsed);
-
-    schedule.push({
+    const downPaymentAmount = Math.round((price * selectedPlan.downPaymentPercentage) / 100);
+    allPaymentDates.push({
         date: downPaymentDate,
         amount: downPaymentAmount,
         description: 'Початковий внесок',
-        paymentType: 'downPayment',
-        incomeForPeriod: 0,
-        coverageRatio: 0,
-        additionalFundsNeeded,
-        assetAmountUsed,
-        currentAssetValue: currentAssetAmount
+        paymentType: 'downPayment'
     });
 
-    lastPaymentDate = downPaymentDate;
+    // Після першого внеску запускаємо актив
+    currentAssetAmount = assetIncome?.initialAmount || 0;
 
-    // Розрахунок регулярних платежів
+    // Додаємо регулярні платежі
     if (selectedPlan.installmentMonths > 0) {
         const totalInstallmentPercentage = 100 - selectedPlan.downPaymentPercentage - selectedPlan.handoverPaymentPercentage;
         const totalInstallmentAmount = Math.round((price * totalInstallmentPercentage) / 100);
@@ -74,104 +62,99 @@ export const calculatePaymentSchedule = (propertyDetails: PropertyDetails): Paym
                 downPaymentDate, 
                 selectedPlan.installmentFrequency === 'monthly' ? i : i * 3
             );
-
-            let incomeForPeriod = 0;
-            if (assetIncome && currentAssetAmount > 0) {
-                const monthsBetweenPayments = differenceInMonths(paymentDate, lastPaymentDate);
-                const { finalAmount, totalIncome } = calculateCompoundIncome(
-                    currentAssetAmount,
-                    assetIncome.apr,
-                    monthsBetweenPayments
-                );
-                currentAssetAmount = finalAmount;
-                incomeForPeriod = totalIncome;
-            }
-
             const currentPaymentAmount = i === numberOfPayments ? remainingAmount : installmentAmount;
             remainingAmount -= currentPaymentAmount;
 
-            let additionalFundsNeeded = 0;
-            let reinvestedAmount = 0;
-            let assetAmountUsed = 0;
-
-            if (incomeForPeriod >= currentPaymentAmount) {
-                assetAmountUsed = currentPaymentAmount;
-                reinvestedAmount = incomeForPeriod - currentPaymentAmount;
-                currentAssetAmount += reinvestedAmount;
-            } else {
-                assetAmountUsed = Math.min(currentAssetAmount, currentPaymentAmount);
-                if (assetAmountUsed < currentPaymentAmount) {
-                    additionalFundsNeeded = currentPaymentAmount - assetAmountUsed;
-                    totalAdditionalFundsNeeded += additionalFundsNeeded;
-                }
-                currentAssetAmount = Math.max(0, currentAssetAmount - assetAmountUsed);
-            }
-
-            schedule.push({
+            allPaymentDates.push({
                 date: paymentDate,
                 amount: currentPaymentAmount,
                 description: `Платіж ${i}`,
-                paymentType: 'installment',
-                incomeForPeriod,
-                coverageRatio: incomeForPeriod ? (incomeForPeriod / currentPaymentAmount) * 100 : 0,
-                additionalFundsNeeded,
-                reinvestedAmount,
-                assetAmountUsed,
-                currentAssetValue: currentAssetAmount
+                paymentType: 'installment'
             });
-
-            lastPaymentDate = paymentDate;
         }
     }
 
-    // Розрахунок платежу при передачі
+    // Додаємо платіж при передачі
     const handoverAmount = Math.round((price * selectedPlan.handoverPaymentPercentage) / 100);
-    
-    let finalIncomeForPeriod = 0;
-    let finalAdditionalFundsNeeded = 0;
-    let finalReinvestedAmount = 0;
-    let finalAssetAmountUsed = 0;
-
-    if (assetIncome && currentAssetAmount > 0) {
-        const monthsToHandover = differenceInMonths(completionDate, lastPaymentDate);
-        const { finalAmount, totalIncome } = calculateCompoundIncome(
-            currentAssetAmount,
-            assetIncome.apr,
-            monthsToHandover
-        );
-        currentAssetAmount = finalAmount;
-        finalIncomeForPeriod = totalIncome;
-
-        if (finalIncomeForPeriod >= handoverAmount) {
-            finalAssetAmountUsed = handoverAmount;
-            finalReinvestedAmount = finalIncomeForPeriod - handoverAmount;
-            currentAssetAmount += finalReinvestedAmount;
-        } else {
-            finalAssetAmountUsed = Math.min(currentAssetAmount, handoverAmount);
-            if (finalAssetAmountUsed < handoverAmount) {
-                finalAdditionalFundsNeeded = handoverAmount - finalAssetAmountUsed;
-                totalAdditionalFundsNeeded += finalAdditionalFundsNeeded;
-            }
-            currentAssetAmount = Math.max(0, currentAssetAmount - finalAssetAmountUsed);
-        }
-    } else {
-        finalAdditionalFundsNeeded = handoverAmount;
-        totalAdditionalFundsNeeded += finalAdditionalFundsNeeded;
-    }
-
-    schedule.push({
+    allPaymentDates.push({
         date: completionDate,
         amount: handoverAmount,
         description: 'Платіж при передачі',
-        paymentType: 'handover',
-        incomeForPeriod: finalIncomeForPeriod,
-        coverageRatio: finalIncomeForPeriod ? (finalIncomeForPeriod / handoverAmount) * 100 : 0,
-        additionalFundsNeeded: finalAdditionalFundsNeeded,
-        reinvestedAmount: finalReinvestedAmount,
-        assetAmountUsed: finalAssetAmountUsed,
-        currentAssetValue: currentAssetAmount
+        paymentType: 'handover'
     });
 
+    // Сортуємо всі дати платежів
+    allPaymentDates.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Розраховуємо щомісячний приріст активу та платежі
+    let currentDate = new Date(downPaymentDate);
+    const lastDate = new Date(completionDate);
+    lastDate.setMonth(lastDate.getMonth() + 1); // Додаємо місяць для включення останньої дати
+
+    while (currentDate < lastDate) {
+        // Знаходимо платіж для поточної дати, якщо він є
+        const payment = allPaymentDates.find(p => 
+            p.date.getFullYear() === currentDate.getFullYear() && 
+            p.date.getMonth() === currentDate.getMonth()
+        );
+
+        // Розраховуємо прибуток за місяць
+        let incomeForPeriod = 0;
+        if (assetIncome && currentAssetAmount > 0 && payment?.description !== 'Початковий внесок') {
+            const { finalAmount, totalIncome } = calculateCompoundIncome(
+                currentAssetAmount,
+                assetIncome.apr,
+                1 // завжди 1 місяць
+            );
+            currentAssetAmount = finalAmount;
+            incomeForPeriod = totalIncome;
+        }
+
+        if (payment) {
+            // Якщо є платіж, перевіряємо чи вистачає коштів
+            let additionalFundsNeeded = 0;
+            let assetAmountUsed = Math.min(currentAssetAmount, payment.amount);
+            
+            if (assetAmountUsed < payment.amount) {
+                additionalFundsNeeded = payment.amount - assetAmountUsed;
+                totalAdditionalFundsNeeded += additionalFundsNeeded;
+            }
+            
+            currentAssetAmount = Math.max(0, currentAssetAmount - assetAmountUsed);
+
+            schedule.push({
+                date: new Date(currentDate),
+                amount: payment.amount,
+                description: payment.description,
+                paymentType: payment.paymentType as any,
+                incomeForPeriod,
+                coverageRatio: payment.amount ? (incomeForPeriod / payment.amount) * 100 : 0,
+                additionalFundsNeeded,
+                reinvestedAmount: incomeForPeriod,
+                assetAmountUsed,
+                currentAssetValue: currentAssetAmount
+            });
+        } else {
+            // Якщо немає платежу, просто додаємо інформацію про приріст активу
+            schedule.push({
+                date: new Date(currentDate),
+                amount: 0,
+                description: 'Реінвестиція прибутку',
+                paymentType: 'installment',
+                incomeForPeriod,
+                coverageRatio: 0,
+                additionalFundsNeeded: 0,
+                reinvestedAmount: incomeForPeriod,
+                assetAmountUsed: 0,
+                currentAssetValue: currentAssetAmount
+            });
+        }
+
+        // Переходимо до наступного місяця
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+
+    // Додаємо підсумковий рядок з загальною сумою додаткових коштів
     if (totalAdditionalFundsNeeded > 0) {
         schedule.push({
             date: completionDate,
