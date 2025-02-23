@@ -238,7 +238,7 @@ const PropertyCalculator: React.FC = () => {
                                         <strong>
                                             {formatCurrency(
                                                 paymentSchedule
-                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів')
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів' && p.description !== 'Реінвестиція прибутку')
                                                     .reduce((sum, payment) => sum + payment.amount, 0),
                                                 propertyDetails.currency
                                             )}
@@ -247,7 +247,7 @@ const PropertyCalculator: React.FC = () => {
                                     <TableCell align="right">
                                         <strong>
                                             {formatCurrency(
-                                                paymentSchedule.reduce((sum, payment) => sum + (payment.incomeForPeriod || 0), 0),
+                                                (paymentSchedule[paymentSchedule.length - 1]?.currentAssetValue || 0) - (propertyDetails.assetIncome?.initialAmount || 0),
                                                 propertyDetails.currency
                                             )}
                                         </strong>
@@ -255,7 +255,9 @@ const PropertyCalculator: React.FC = () => {
                                     <TableCell align="right">
                                         <strong>
                                             {formatCurrency(
-                                                paymentSchedule.reduce((sum, payment) => sum + (payment.assetAmountUsed || 0), 0),
+                                                paymentSchedule
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів' && p.description !== 'Реінвестиція прибутку')
+                                                    .reduce((sum, payment) => sum + (payment.assetAmountUsed || 0), 0),
                                                 propertyDetails.currency
                                             )}
                                         </strong>
@@ -263,7 +265,7 @@ const PropertyCalculator: React.FC = () => {
                                     <TableCell align="right">
                                         <strong>
                                             {formatCurrency(
-                                                paymentSchedule.reduce((sum, payment) => sum + (payment.reinvestedAmount || 0), 0),
+                                                (paymentSchedule[paymentSchedule.length - 1]?.currentAssetValue || 0) - (propertyDetails.assetIncome?.initialAmount || 0),
                                                 propertyDetails.currency
                                             )}
                                         </strong>
@@ -281,9 +283,9 @@ const PropertyCalculator: React.FC = () => {
                                     <TableCell align="right">
                                         <strong>
                                             {formatPercentage(
-                                                (paymentSchedule.reduce((sum, payment) => sum + (payment.incomeForPeriod || 0), 0) /
+                                                (((paymentSchedule[paymentSchedule.length - 1]?.currentAssetValue || 0) - (propertyDetails.assetIncome?.initialAmount || 0)) /
                                                 paymentSchedule
-                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів')
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів' && p.description !== 'Реінвестиція прибутку')
                                                     .reduce((sum, payment) => sum + payment.amount, 0)) * 100
                                             )}
                                         </strong>
