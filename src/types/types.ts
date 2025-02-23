@@ -11,11 +11,18 @@ export interface PaymentPlan {
 
 export type Currency = 'AED' | 'USD';
 
+export interface AssetIncome {
+    initialAmount: number;
+    apr: number;
+    currency: Currency;
+}
+
 export interface PropertyDetails {
     price: number;
     completionDate: Date;
     selectedPlan: PaymentPlan;
     currency: Currency;
+    assetIncome?: AssetIncome;
 }
 
 export interface PaymentSchedule {
@@ -23,6 +30,12 @@ export interface PaymentSchedule {
     amount: number;
     description: string;
     paymentType: 'downPayment' | 'installment' | 'handover' | 'postHandover';
+    incomeForPeriod?: number;
+    coverageRatio?: number;
+    additionalFundsNeeded?: number;
+    reinvestedAmount?: number;
+    assetAmountUsed?: number;
+    currentAssetValue?: number;
 }
 
 export const DEFAULT_PAYMENT_PLANS: PaymentPlan[] = [

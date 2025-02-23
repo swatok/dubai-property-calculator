@@ -21,14 +21,19 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format } from 'date-fns';
 import { PaymentSchedule, PropertyDetails, DEFAULT_PAYMENT_PLANS, Currency, CURRENCY_CONVERSION } from '../types/types';
-import { calculatePaymentSchedule, formatCurrency } from '../utils/calculatePayments';
+import { calculatePaymentSchedule, formatCurrency, formatPercentage } from '../utils/calculatePayments';
 
 const PropertyCalculator: React.FC = () => {
     const [propertyDetails, setPropertyDetails] = useState<PropertyDetails>({
         price: 1000000,
         completionDate: new Date(new Date().setFullYear(new Date().getFullYear() + 2)),
         selectedPlan: DEFAULT_PAYMENT_PLANS[0],
-        currency: 'AED'
+        currency: 'AED',
+        assetIncome: {
+            initialAmount: 0,
+            apr: 0,
+            currency: 'AED'
+        }
     });
 
     const [paymentSchedule, setPaymentSchedule] = useState<PaymentSchedule[]>([]);
@@ -44,7 +49,12 @@ const PropertyCalculator: React.FC = () => {
             setPropertyDetails({
                 ...propertyDetails,
                 currency: newCurrency,
-                price: Math.round(propertyDetails.price * conversionRate)
+                price: Math.round(propertyDetails.price * conversionRate),
+                assetIncome: {
+                    ...propertyDetails.assetIncome!,
+                    initialAmount: Math.round(propertyDetails.assetIncome!.initialAmount * conversionRate),
+                    currency: newCurrency
+                }
             });
         }
     };
@@ -105,6 +115,44 @@ const PropertyCalculator: React.FC = () => {
                             </FormControl>
                         </Grid>
                         <Grid item xs={12}>
+                            <Box sx={{ mb: 2, mt: 4, fontSize: '1.5rem', fontWeight: 'bold' }}>
+                                Інформація про актив для платежів
+                            </Box>
+                        </Grid>
+
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                label={`Початкова сума активу (${propertyDetails.currency})`}
+                                type="number"
+                                value={propertyDetails.assetIncome?.initialAmount || 0}
+                                onChange={(e) => setPropertyDetails({
+                                    ...propertyDetails,
+                                    assetIncome: {
+                                        ...propertyDetails.assetIncome!,
+                                        initialAmount: Number(e.target.value)
+                                    }
+                                })}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                label="Річна відсоткова ставка (APR %)"
+                                type="number"
+                                value={propertyDetails.assetIncome?.apr || 0}
+                                onChange={(e) => setPropertyDetails({
+                                    ...propertyDetails,
+                                    assetIncome: {
+                                        ...propertyDetails.assetIncome!,
+                                        apr: Number(e.target.value)
+                                    }
+                                })}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12}>
                             <ToggleButtonGroup
                                 value={propertyDetails.currency}
                                 exclusive
@@ -119,7 +167,7 @@ const PropertyCalculator: React.FC = () => {
                     </Grid>
 
                     <Box component="h5" sx={{ mb: 2, fontSize: '1.5rem', fontWeight: 'bold' }}>
-                        Графік платежів
+                        Графік платежів та покриття
                     </Box>
 
                     <TableContainer>
@@ -128,16 +176,59 @@ const PropertyCalculator: React.FC = () => {
                                 <TableRow>
                                     <TableCell>Дата</TableCell>
                                     <TableCell>Опис</TableCell>
-                                    <TableCell align="right">Сума</TableCell>
+                                    <TableCell align="right">Сума платежу</TableCell>
+                                    <TableCell align="right">Прибуток за період</TableCell>
+                                    <TableCell align="right">Використано з активу</TableCell>
+                                    <TableCell align="right">Реінвестовано</TableCell>
+                                    <TableCell align="right">Додаткові кошти</TableCell>
+                                    <TableCell align="right">Покриття платежу</TableCell>
+                                    <TableCell align="right">Вартість активу</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {paymentSchedule.map((payment, index) => (
-                                    <TableRow key={index}>
+                                    <TableRow 
+                                        key={index}
+                                        sx={{
+                                            backgroundColor: payment.description === 'Загальна сума додаткових коштів' 
+                                                ? 'error.main' 
+                                                : 'inherit'
+                                        }}
+                                    >
                                         <TableCell>{format(payment.date, 'dd.MM.yyyy')}</TableCell>
                                         <TableCell>{payment.description}</TableCell>
                                         <TableCell align="right">
                                             {formatCurrency(payment.amount, propertyDetails.currency)}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrency(payment.incomeForPeriod || 0, propertyDetails.currency)}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrency(payment.assetAmountUsed || 0, propertyDetails.currency)}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrency(payment.reinvestedAmount || 0, propertyDetails.currency)}
+                                        </TableCell>
+                                        <TableCell 
+                                            align="right"
+                                            sx={{
+                                                color: payment.additionalFundsNeeded ? 'error.main' : 'inherit'
+                                            }}
+                                        >
+                                            {payment.additionalFundsNeeded ? 
+                                                formatCurrency(payment.additionalFundsNeeded, propertyDetails.currency) : 
+                                                '-'}
+                                        </TableCell>
+                                        <TableCell 
+                                            align="right"
+                                            sx={{
+                                                color: (payment.coverageRatio || 0) >= 100 ? 'success.main' : 'error.main'
+                                            }}
+                                        >
+                                            {formatPercentage(payment.coverageRatio || 0)}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrency(payment.currentAssetValue || 0, propertyDetails.currency)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -146,7 +237,61 @@ const PropertyCalculator: React.FC = () => {
                                     <TableCell align="right">
                                         <strong>
                                             {formatCurrency(
-                                                paymentSchedule.reduce((sum, payment) => sum + payment.amount, 0),
+                                                paymentSchedule
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів')
+                                                    .reduce((sum, payment) => sum + payment.amount, 0),
+                                                propertyDetails.currency
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatCurrency(
+                                                paymentSchedule.reduce((sum, payment) => sum + (payment.incomeForPeriod || 0), 0),
+                                                propertyDetails.currency
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatCurrency(
+                                                paymentSchedule.reduce((sum, payment) => sum + (payment.assetAmountUsed || 0), 0),
+                                                propertyDetails.currency
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatCurrency(
+                                                paymentSchedule.reduce((sum, payment) => sum + (payment.reinvestedAmount || 0), 0),
+                                                propertyDetails.currency
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatCurrency(
+                                                paymentSchedule
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів')
+                                                    .reduce((sum, payment) => sum + (payment.additionalFundsNeeded || 0), 0),
+                                                propertyDetails.currency
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatPercentage(
+                                                (paymentSchedule.reduce((sum, payment) => sum + (payment.incomeForPeriod || 0), 0) /
+                                                paymentSchedule
+                                                    .filter(p => p.description !== 'Загальна сума додаткових коштів')
+                                                    .reduce((sum, payment) => sum + payment.amount, 0)) * 100
+                                            )}
+                                        </strong>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <strong>
+                                            {formatCurrency(
+                                                paymentSchedule[paymentSchedule.length - 1]?.currentAssetValue || 0,
                                                 propertyDetails.currency
                                             )}
                                         </strong>
