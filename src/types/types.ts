@@ -17,25 +17,57 @@ export interface AssetIncome {
     currency: Currency;
 }
 
+export interface MortgagePlan {
+    name: string;
+    description: string;
+    downPaymentPercentage: number;
+    interestRate: number; // Річна ставка
+    termYears: number; // Термін в роках
+    maxLoanAmount: number; // Максимальна сума кредиту в AED
+}
+
+export type PaymentMethod = 'installment' | 'mortgage';
+
+export interface RentalIncome {
+    monthlyAmount: number;
+    currency: Currency;
+}
+
 export interface PropertyDetails {
     price: number;
     completionDate: Date;
+    endDate: Date; // Дата кінця графіку платежів
     selectedPlan: PaymentPlan;
     currency: Currency;
     assetIncome?: AssetIncome;
+    rentalIncome?: RentalIncome; // Дохід від оренди після завершення будівництва
+    paymentMethod: PaymentMethod;
+    selectedMortgagePlan?: MortgagePlan;
+    customMortgageRate?: number;
+    dldBuyerPercentage: number; // Відсоток DLD Fee, який платить покупець (0-4%)
+    realtorCommission: number; // Комісія ріелтора у відсотках
+    mortgageSetupFee: number; // Комісія за оформлення іпотеки (зазвичай 1%)
+    valuationFee: number; // Оцінка нерухомості (фіксована сума)
+    mortgageRegistrationFee: number; // Реєстрація іпотеки (0.25%)
+    noObjectionCertificate: number; // NOC - дозвіл від забудовника
+    titleDeedFee: number; // Оформлення права власності
+    administrativeFees: number; // Адміністративні збори
 }
 
 export interface PaymentSchedule {
     date: Date;
     amount: number;
     description: string;
-    paymentType: 'downPayment' | 'installment' | 'handover' | 'postHandover';
-    incomeForPeriod?: number;
-    coverageRatio?: number;
-    additionalFundsNeeded?: number;
-    reinvestedAmount?: number;
-    assetAmountUsed?: number;
-    currentAssetValue?: number;
+    paymentType: 'installment' | 'downPayment' | 'handover' | 'postHandover' | 'summary';
+    incomeForPeriod: number;
+    coverageRatio: number; // Загальний відсоток покриття (оренда + актив)
+    rentalCoverageRatio: number; // Відсоток покриття тільки орендним доходом
+    additionalFundsNeeded: number;
+    reinvestedAmount: number;
+    assetAmountUsed: number;
+    rentalAmountUsed: number;
+    currentAssetValue: number;
+    rentalIncome: number;
 }
 
 export const DEFAULT_PAYMENT_PLANS: PaymentPlan[] = [
@@ -126,6 +158,33 @@ export const DEFAULT_PAYMENT_PLANS: PaymentPlan[] = [
         installmentFrequency: 'monthly',
         postHandoverMonths: 12,
         postHandoverPercentage: 20
+    }
+];
+
+export const DEFAULT_MORTGAGE_PLANS: MortgagePlan[] = [
+    {
+        name: "Стандартна іпотека",
+        description: "20% перший внесок, 4.49% річних, до 25 років",
+        downPaymentPercentage: 20,
+        interestRate: 4.49,
+        termYears: 25,
+        maxLoanAmount: 15000000
+    },
+    {
+        name: "Спеціальна програма",
+        description: "30% перший внесок, 3.99% річних, до 20 років",
+        downPaymentPercentage: 30,
+        interestRate: 3.99,
+        termYears: 20,
+        maxLoanAmount: 10000000
+    },
+    {
+        name: "Преміум іпотека",
+        description: "25% перший внесок, 4.29% річних, до 30 років",
+        downPaymentPercentage: 25,
+        interestRate: 4.29,
+        termYears: 30,
+        maxLoanAmount: 20000000
     }
 ];
 

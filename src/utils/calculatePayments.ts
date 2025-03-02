@@ -24,62 +24,112 @@ const calculateCompoundIncome = (
     };
 };
 
+const calculateMonthlyMortgagePayment = (loanAmount: number, annualRate: number, years: number): number => {
+    const monthlyRate = annualRate / 12 / 100;
+    const numberOfPayments = years * 12;
+    const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numberOfPayments)) / (Math.pow(1 + monthlyRate, numberOfPayments) - 1);
+    return Math.round(monthlyPayment);
+};
+
 export const calculatePaymentSchedule = (propertyDetails: PropertyDetails): PaymentSchedule[] => {
-    const { price, completionDate, selectedPlan, assetIncome } = propertyDetails;
+    const { 
+        price, 
+        completionDate,
+        endDate,
+        selectedPlan, 
+        assetIncome,
+        rentalIncome,
+        paymentMethod, 
+        selectedMortgagePlan, 
+        customMortgageRate, 
+        dldBuyerPercentage,
+        realtorCommission,
+        mortgageSetupFee,
+        valuationFee,
+        mortgageRegistrationFee,
+        noObjectionCertificate,
+        titleDeedFee,
+        administrativeFees
+    } = propertyDetails;
+    
     const schedule: PaymentSchedule[] = [];
-    let currentAssetAmount = 0; // Починаємо з 0, бо актив ще не запущено
+    let currentAssetAmount = assetIncome?.initialAmount || 0;
     let totalAdditionalFundsNeeded = 0;
+    let totalRentalIncome = 0;
+
+    // Розрахунок DLD Fee та інших початкових витрат
+    const totalDLD = price * 0.04;
+    const buyerDLD = (totalDLD * dldBuyerPercentage) / 4;
+    const realtorFee = (price * realtorCommission) / 100;
+    const fixedFees = valuationFee + noObjectionCertificate + titleDeedFee + administrativeFees;
 
     // Створюємо масив всіх дат платежів
     const allPaymentDates: { date: Date; amount: number; description: string; paymentType: string }[] = [];
     
-    // Додаємо початковий внесок
+    // Початковий внесок з усіма додатковими витратами
     const downPaymentDate = new Date();
     const downPaymentAmount = Math.round((price * selectedPlan.downPaymentPercentage) / 100);
+    const totalInitialPayment = downPaymentAmount + buyerDLD + realtorFee + fixedFees;
+    
     allPaymentDates.push({
         date: downPaymentDate,
-        amount: downPaymentAmount,
-        description: 'Початковий внесок',
+        amount: totalInitialPayment,
+        description: `Початковий внесок ${selectedPlan.downPaymentPercentage}% (${formatCurrency(downPaymentAmount, propertyDetails.currency)}) + ` +
+                    `DLD Fee ${formatCurrency(buyerDLD, propertyDetails.currency)}, ` +
+                    `комісія ріелтора ${formatCurrency(realtorFee, propertyDetails.currency)}, ` +
+                    `інші збори ${formatCurrency(fixedFees, propertyDetails.currency)}`,
         paymentType: 'downPayment'
     });
 
-    // Після першого внеску запускаємо актив
-    currentAssetAmount = assetIncome?.initialAmount || 0;
-
-    // Додаємо регулярні платежі
+    // Розрахунок платежів до передачі
     if (selectedPlan.installmentMonths > 0) {
         const totalInstallmentPercentage = 100 - selectedPlan.downPaymentPercentage - selectedPlan.handoverPaymentPercentage;
         const totalInstallmentAmount = Math.round((price * totalInstallmentPercentage) / 100);
-        const numberOfPayments = selectedPlan.installmentFrequency === 'monthly' 
-            ? selectedPlan.installmentMonths 
-            : Math.ceil(selectedPlan.installmentMonths / 3);
         
-        const installmentAmount = Math.round(totalInstallmentAmount / numberOfPayments);
-        let remainingAmount = totalInstallmentAmount;
+        if (selectedPlan.installmentFrequency === 'quarterly') {
+            const quarterlyPayments = Math.ceil(selectedPlan.installmentMonths / 3);
+            const quarterlyAmount = Math.round(totalInstallmentAmount / quarterlyPayments);
+            
+            for (let i = 1; i <= quarterlyPayments; i++) {
+                const paymentDate = addMonths(downPaymentDate, i * 3);
+                const isLastPayment = i === quarterlyPayments;
+                const amount = isLastPayment ? 
+                    totalInstallmentAmount - (quarterlyAmount * (quarterlyPayments - 1)) : 
+                    quarterlyAmount;
 
-        for (let i = 1; i <= numberOfPayments; i++) {
-            const paymentDate = addMonths(
-                downPaymentDate, 
-                selectedPlan.installmentFrequency === 'monthly' ? i : i * 3
-            );
-            const currentPaymentAmount = i === numberOfPayments ? remainingAmount : installmentAmount;
-            remainingAmount -= currentPaymentAmount;
+                allPaymentDates.push({
+                    date: paymentDate,
+                    amount: amount,
+                    description: `Квартальний платіж ${i} (${formatPercentage(amount / price * 100)} від вартості)`,
+                    paymentType: 'installment'
+                });
+            }
+        } else {
+            const monthlyAmount = Math.round(totalInstallmentAmount / selectedPlan.installmentMonths);
+            
+            for (let i = 1; i <= selectedPlan.installmentMonths; i++) {
+                const paymentDate = addMonths(downPaymentDate, i);
+                const isLastPayment = i === selectedPlan.installmentMonths;
+                const amount = isLastPayment ? 
+                    totalInstallmentAmount - (monthlyAmount * (selectedPlan.installmentMonths - 1)) : 
+                    monthlyAmount;
 
-            allPaymentDates.push({
-                date: paymentDate,
-                amount: currentPaymentAmount,
-                description: `Платіж ${i}`,
-                paymentType: 'installment'
-            });
+                allPaymentDates.push({
+                    date: paymentDate,
+                    amount: amount,
+                    description: `Щомісячний платіж ${i} (${formatPercentage(amount / price * 100)} від вартості)`,
+                    paymentType: 'installment'
+                });
+            }
         }
     }
 
-    // Додаємо платіж при передачі
+    // Платіж при передачі
     const handoverAmount = Math.round((price * selectedPlan.handoverPaymentPercentage) / 100);
     allPaymentDates.push({
         date: completionDate,
         amount: handoverAmount,
-        description: 'Платіж при передачі',
+        description: `Платіж при передачі (${selectedPlan.handoverPaymentPercentage}%)`,
         paymentType: 'handover'
     });
 
@@ -88,35 +138,71 @@ export const calculatePaymentSchedule = (propertyDetails: PropertyDetails): Paym
 
     // Розраховуємо щомісячний приріст активу та платежі
     let currentDate = new Date(downPaymentDate);
-    const lastDate = new Date(completionDate);
-    lastDate.setMonth(lastDate.getMonth() + 1); // Додаємо місяць для включення останньої дати
+    currentDate.setHours(0, 0, 0, 0); // Скидаємо час
+    
+    const lastPaymentDate = new Date(allPaymentDates[allPaymentDates.length - 1].date);
+    lastPaymentDate.setHours(0, 0, 0, 0);
+    
+    const userEndDate = new Date(endDate);
+    userEndDate.setHours(0, 0, 0, 0);
+    
+    const calculationEndDate = userEndDate > lastPaymentDate ? userEndDate : lastPaymentDate;
 
-    while (currentDate < lastDate) {
-        // Знаходимо платіж для поточної дати, якщо він є
-        const payment = allPaymentDates.find(p => 
-            p.date.getFullYear() === currentDate.getFullYear() && 
-            p.date.getMonth() === currentDate.getMonth()
-        );
+    // Розраховуємо загальну суму платежів для обчислення відсотка покриття
+    const totalPayments = allPaymentDates.reduce((sum, payment) => sum + payment.amount, 0);
 
-        // Розраховуємо прибуток за місяць
+    while (currentDate <= calculationEndDate) {
+        // Знаходимо платіж для поточної дати
+        const payment = allPaymentDates.find(p => {
+            const paymentDate = new Date(p.date);
+            paymentDate.setHours(0, 0, 0, 0);
+            return paymentDate.getTime() === currentDate.getTime();
+        });
+
+        // Розраховуємо прибуток від активу за місяць
         let incomeForPeriod = 0;
-        if (assetIncome && currentAssetAmount > 0 && payment?.description !== 'Початковий внесок') {
+        if (assetIncome && currentAssetAmount > 0) {
             const { finalAmount, totalIncome } = calculateCompoundIncome(
                 currentAssetAmount,
                 assetIncome.apr,
-                1 // завжди 1 місяць
+                1
             );
-            currentAssetAmount = finalAmount;
             incomeForPeriod = totalIncome;
+            currentAssetAmount = finalAmount;
         }
 
+        // Додаємо орендний дохід після завершення будівництва
+        let rentalIncomeForPeriod = 0;
+        let rentalCoverageRatio = 0;
+        
+        const completionDateTime = new Date(completionDate);
+        completionDateTime.setHours(0, 0, 0, 0);
+        
+        if (rentalIncome && currentDate >= completionDateTime) {
+            rentalIncomeForPeriod = rentalIncome.monthlyAmount;
+            totalRentalIncome += rentalIncomeForPeriod;
+            // Розраховуємо відсоток покриття орендою
+            if (payment) {
+                rentalCoverageRatio = (rentalIncomeForPeriod / payment.amount) * 100;
+            }
+        }
+
+        // Загальний дохід за період (орендний має пріоритет)
+        const totalIncomeForPeriod = rentalIncomeForPeriod + incomeForPeriod;
+
         if (payment) {
-            // Якщо є платіж, перевіряємо чи вистачає коштів
-            let additionalFundsNeeded = 0;
-            let assetAmountUsed = Math.min(currentAssetAmount, payment.amount);
+            // Спочатку використовуємо орендний дохід
+            let remainingPayment = payment.amount;
+            let rentalAmountUsed = Math.min(rentalIncomeForPeriod, remainingPayment);
+            remainingPayment -= rentalAmountUsed;
+
+            // Потім використовуємо дохід від активу
+            let assetAmountUsed = Math.min(currentAssetAmount, remainingPayment);
+            remainingPayment -= assetAmountUsed;
             
-            if (assetAmountUsed < payment.amount) {
-                additionalFundsNeeded = payment.amount - assetAmountUsed;
+            let additionalFundsNeeded = remainingPayment;
+            
+            if (additionalFundsNeeded > 0) {
                 totalAdditionalFundsNeeded += additionalFundsNeeded;
             }
             
@@ -127,44 +213,60 @@ export const calculatePaymentSchedule = (propertyDetails: PropertyDetails): Paym
                 amount: payment.amount,
                 description: payment.description,
                 paymentType: payment.paymentType as any,
-                incomeForPeriod,
-                coverageRatio: payment.amount ? (incomeForPeriod / payment.amount) * 100 : 0,
+                incomeForPeriod: totalIncomeForPeriod,
+                coverageRatio: payment.amount ? (totalIncomeForPeriod / payment.amount) * 100 : 0,
+                rentalCoverageRatio,
                 additionalFundsNeeded,
-                reinvestedAmount: incomeForPeriod,
+                reinvestedAmount: totalIncomeForPeriod - (rentalAmountUsed + assetAmountUsed),
                 assetAmountUsed,
-                currentAssetValue: currentAssetAmount
+                rentalAmountUsed,
+                currentAssetValue: currentAssetAmount,
+                rentalIncome: rentalIncomeForPeriod
             });
         } else {
-            // Якщо немає платежу, просто додаємо інформацію про приріст активу
+            // Якщо немає платежу, весь дохід реінвестується
             schedule.push({
                 date: new Date(currentDate),
                 amount: 0,
-                description: 'Реінвестиція прибутку',
+                description: currentDate >= completionDateTime ? 
+                    'Реінвестиція прибутку та орендного доходу' : 
+                    'Реінвестиція прибутку',
                 paymentType: 'installment',
-                incomeForPeriod,
+                incomeForPeriod: totalIncomeForPeriod,
                 coverageRatio: 0,
+                rentalCoverageRatio: 0,
                 additionalFundsNeeded: 0,
-                reinvestedAmount: incomeForPeriod,
+                reinvestedAmount: totalIncomeForPeriod,
                 assetAmountUsed: 0,
-                currentAssetValue: currentAssetAmount
+                rentalAmountUsed: 0,
+                currentAssetValue: currentAssetAmount,
+                rentalIncome: rentalIncomeForPeriod
             });
         }
 
-        // Переходимо до наступного місяця
-        currentDate.setMonth(currentDate.getMonth() + 1);
+        // Додаємо один місяць
+        currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+        currentDate.setHours(0, 0, 0, 0);
     }
 
-    // Додаємо підсумковий рядок з загальною сумою додаткових коштів
-    if (totalAdditionalFundsNeeded > 0) {
+    // Додаємо підсумковий рядок
+    if (totalAdditionalFundsNeeded > 0 || totalRentalIncome > 0) {
+        const totalRentalCoverageRatio = (totalRentalIncome / totalPayments) * 100;
         schedule.push({
-            date: completionDate,
+            date: calculationEndDate,
             amount: totalAdditionalFundsNeeded,
-            description: 'Загальна сума додаткових коштів',
-            paymentType: 'downPayment',
+            description: `Підсумок: Додаткові кошти ${formatCurrency(totalAdditionalFundsNeeded, propertyDetails.currency)}, ` +
+                        `Загальний орендний дохід ${formatCurrency(totalRentalIncome, propertyDetails.currency)} (${formatPercentage(totalRentalCoverageRatio)} покриття)`,
+            paymentType: 'summary',
             incomeForPeriod: 0,
             coverageRatio: 0,
+            rentalCoverageRatio: totalRentalCoverageRatio,
             additionalFundsNeeded: totalAdditionalFundsNeeded,
-            currentAssetValue: currentAssetAmount
+            currentAssetValue: currentAssetAmount,
+            rentalIncome: totalRentalIncome,
+            reinvestedAmount: 0,
+            assetAmountUsed: 0,
+            rentalAmountUsed: 0
         });
     }
 
